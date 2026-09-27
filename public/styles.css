@@ -1,0 +1,535 @@
+/* ============================================================
+   styles.css
+   -----------
+   All visual styling for the Resume Skill Gap Analyzer.
+   Uses CSS custom properties for easy theming.
+   Responsive — works on mobile, tablet, and desktop.
+   ============================================================ */
+
+/* ---------- CSS Reset & Variables ---------- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --clr-bg:        #f0f4f8;
+  --clr-surface:   #ffffff;
+  --clr-primary:   #4f46e5;   /* indigo */
+  --clr-primary-h: #4338ca;
+  --clr-success:   #16a34a;
+  --clr-danger:    #dc2626;
+  --clr-warning:   #d97706;
+  --clr-text:      #1e293b;
+  --clr-muted:     #64748b;
+  --clr-border:    #e2e8f0;
+  --radius:        12px;
+  --shadow:        0 4px 24px rgba(0, 0, 0, 0.08);
+  --transition:    0.2s ease;
+  --font:          'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+/* ---------- Base ---------- */
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font);
+  background: var(--clr-bg);
+  color: var(--clr-text);
+  line-height: 1.6;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- Layout ---------- */
+.container {
+  width: 100%;
+  max-width: 860px;
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+}
+
+main.container {
+  flex: 1;
+  padding-block: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* ---------- Header ---------- */
+.site-header {
+  background: var(--clr-primary);
+  color: #fff;
+  padding-block: 1.25rem;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.logo i { font-size: 1.6rem; }
+
+.tagline {
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+
+/* ---------- Cards ---------- */
+.card {
+  background: var(--clr-surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.75rem;
+}
+
+.section-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--clr-text);
+}
+
+.step-badge {
+  background: var(--clr-primary);
+  color: #fff;
+  border-radius: 50%;
+  width: 1.7rem;
+  height: 1.7rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ---------- Form ---------- */
+.form-group { margin-bottom: 1.5rem; }
+
+.form-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--clr-text);
+}
+
+.form-label i {
+  color: var(--clr-primary);
+  margin-right: 0.3rem;
+}
+
+/* --- File drop zone --- */
+.file-drop-zone {
+  border: 2px dashed var(--clr-border);
+  border-radius: var(--radius);
+  padding: 2rem 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+  position: relative;
+  background: #fafafa;
+}
+
+.file-drop-zone:hover,
+.file-drop-zone:focus,
+.file-drop-zone.dragover {
+  border-color: var(--clr-primary);
+  background: #ede9fe;
+  outline: 2px solid var(--clr-primary);
+  outline-offset: 2px;
+}
+
+.file-drop-zone.has-file {
+  border-color: var(--clr-success);
+  background: #f0fdf4;
+}
+
+.drop-icon {
+  font-size: 2.5rem;
+  color: var(--clr-primary);
+  margin-bottom: 0.6rem;
+}
+
+.link-text {
+  color: var(--clr-primary);
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+.file-name {
+  margin-top: 0.5rem;
+  font-weight: 600;
+  color: var(--clr-success);
+  font-size: 0.9rem;
+  word-break: break-all;
+}
+
+textarea {
+  width: 100%;
+  border: 1.5px solid var(--clr-border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-family: var(--font);
+  font-size: 0.95rem;
+  color: var(--clr-text);
+  resize: vertical;
+  transition: border-color var(--transition), box-shadow var(--transition);
+  background: #fafafa;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: var(--clr-primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+  background: #fff;
+}
+
+.hint {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--clr-muted);
+  margin-top: 0.35rem;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition), transform var(--transition), box-shadow var(--transition);
+}
+
+.btn:active { transform: scale(0.97); }
+
+.btn-primary {
+  background: var(--clr-primary);
+  color: #fff;
+  width: 100%;
+  justify-content: center;
+  padding-block: 0.85rem;
+  font-size: 1.05rem;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+.btn-primary:hover:not(:disabled) { background: var(--clr-primary-h); }
+
+.btn-primary:disabled {
+  background: #a5b4fc;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--clr-primary);
+  border: 2px solid var(--clr-primary);
+}
+
+.btn-secondary:hover { background: #ede9fe; }
+
+/* ---------- Alert ---------- */
+.alert {
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.alert-error {
+  background: #fef2f2;
+  border: 1.5px solid #fca5a5;
+  color: var(--clr-danger);
+}
+
+/* ---------- Loading ---------- */
+.loading-card {
+  text-align: center;
+  padding: 3rem 1.5rem;
+}
+
+.spinner {
+  width: 52px;
+  height: 52px;
+  border: 5px solid var(--clr-border);
+  border-top-color: var(--clr-primary);
+  border-radius: 50%;
+  animation: spin 0.85s linear infinite;
+  margin: 0 auto 1.25rem;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-text {
+  color: var(--clr-muted);
+  font-size: 0.95rem;
+}
+
+.loading-subtext {
+  color: var(--clr-muted);
+  font-size: 0.8rem;
+  margin-top: 0.4rem;
+  opacity: 0.75;
+}
+
+/* Banner code tag */
+.alert code {
+  background: rgba(0,0,0,0.07);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.85em;
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+/* ---------- Score Card ---------- */
+.score-card { }
+
+.score-wrap {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.score-ring {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  flex-shrink: 0;
+}
+
+.ring-svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.ring-bg {
+  fill: none;
+  stroke: var(--clr-border);
+  stroke-width: 10;
+}
+
+.ring-fill {
+  fill: none;
+  stroke: var(--clr-primary);
+  stroke-width: 10;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1),
+              stroke 0.5s ease;
+}
+
+.score-number {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--clr-text);
+}
+
+.score-meta { flex: 1; min-width: 180px; }
+
+.score-summary {
+  font-size: 0.95rem;
+  color: var(--clr-muted);
+  margin-bottom: 0.75rem;
+  line-height: 1.6;
+}
+
+.score-label {
+  display: inline-block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 0.3rem 0.9rem;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+}
+
+.label-excellent { background: #dcfce7; color: #166534; }
+.label-good      { background: #dbeafe; color: #1e40af; }
+.label-fair      { background: #fef9c3; color: #854d0e; }
+.label-poor      { background: #fee2e2; color: #991b1b; }
+
+/* ---------- Skills Grid ---------- */
+.skills-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 580px) {
+  .skills-grid { grid-template-columns: 1fr; }
+}
+
+.skills-card { }
+
+.card-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.icon-green { color: var(--clr-success); }
+.icon-red   { color: var(--clr-danger); }
+
+.badge {
+  background: #e0e7ff;
+  color: var(--clr-primary);
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin-left: auto;
+}
+
+.badge-red {
+  background: #fee2e2;
+  color: var(--clr-danger);
+}
+
+.skill-list {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.skill-tag {
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  animation: popIn 0.3s ease both;
+}
+
+.skill-tag-match {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.skill-tag-miss {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ---------- Recommendations ---------- */
+.reco-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.reco-card-item {
+  border: 1.5px solid var(--clr-border);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  transition: box-shadow var(--transition), border-color var(--transition);
+  animation: slideUp 0.4s ease both;
+}
+
+.reco-card-item:hover {
+  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.1);
+  border-color: var(--clr-primary);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.reco-skill-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--clr-primary);
+  margin-bottom: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.reco-reason {
+  font-size: 0.85rem;
+  color: var(--clr-muted);
+  margin-bottom: 0.6rem;
+  line-height: 1.5;
+}
+
+.reco-resource {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--clr-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* ---------- Reset Button ---------- */
+.reset-wrap {
+  display: flex;
+  justify-content: center;
+  padding-bottom: 0.5rem;
+}
+
+/* ---------- Footer ---------- */
+.site-footer {
+  background: var(--clr-surface);
+  border-top: 1px solid var(--clr-border);
+  padding-block: 1rem;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--clr-muted);
+  margin-top: auto;
+}
+
+/* ---------- Utilities ---------- */
+.hidden { display: none !important; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

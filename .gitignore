@@ -1,0 +1,23 @@
+# Environment variables — NEVER commit your real API keys
+.env
+
+# Dependencies
+node_modules/
+
+# Uploaded resume files (temporary uploads)
+uploads/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Build artifacts
+dist/

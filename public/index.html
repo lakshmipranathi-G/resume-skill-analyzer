@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Resume Skill Gap Analyzer</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Simple icon font -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+        integrity="sha512-Avb2QiuDEEvB4bZJYdft2mNjVShBftLdPG8FJ0V7irTLQ8Tnj8X09PpnkFxmu3Q8dmaIHhUV/1bCzQJb0tYXg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+<body>
+
+  <!-- ========== HEADER ========== -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="logo">
+        <i class="fa-solid fa-magnifying-glass-chart"></i>
+        <span>SkillGap<strong>AI</strong></span>
+      </div>
+      <p class="tagline">Compare your resume with any job description in seconds.</p>
+    </div>
+  </header>
+
+  <!-- ========== MAIN CONTENT ========== -->
+  <main class="container">
+
+    <!-- ---- OLLAMA STATUS BANNER ---- -->
+    <!-- Shown only when Ollama is not reachable; hidden by default via JS check -->
+    <div id="ollamaBanner" class="alert alert-error hidden" role="alert" aria-live="assertive">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <span id="ollamaBannerText">
+        Ollama is not running. Please start it with <code>ollama serve</code> and refresh.
+      </span>
+    </div>
+
+    <!-- ---- INPUT SECTION ---- -->
+    <section class="card input-card" id="inputSection">
+      <h2 class="section-title">
+        <span class="step-badge">1</span> Upload Your Resume &amp; Job Description
+      </h2>
+
+      <form id="analyzeForm" novalidate>
+
+        <!-- Resume Upload -->
+        <div class="form-group">
+          <label for="resumeInput" class="form-label">
+            <i class="fa-solid fa-file-pdf"></i> Resume (PDF, max 5 MB)
+          </label>
+          <div class="file-drop-zone" id="dropZone" role="button" tabindex="0"
+               aria-label="Click or drag and drop your PDF resume here">
+            <i class="fa-solid fa-cloud-arrow-up drop-icon"></i>
+            <p id="dropText">Drag &amp; drop your PDF here, or <span class="link-text">click to browse</span></p>
+            <p id="fileName" class="file-name hidden"></p>
+            <input type="file" id="resumeInput" name="resume" accept=".pdf"
+                   class="visually-hidden" aria-describedby="fileHint" />
+          </div>
+          <small id="fileHint" class="hint">Only PDF files are accepted.</small>
+        </div>
+
+        <!-- Job Description -->
+        <div class="form-group">
+          <label for="jobDescription" class="form-label">
+            <i class="fa-solid fa-briefcase"></i> Job Description
+          </label>
+          <textarea
+            id="jobDescription"
+            name="jobDescription"
+            rows="10"
+            placeholder="Paste the full job description here (at least 50 characters)…"
+            aria-describedby="jdHint"
+          ></textarea>
+          <small id="jdHint" class="hint">
+            Copy the job posting text directly — the more detail, the better the analysis.
+          </small>
+        </div>
+
+        <!-- Error message -->
+        <div id="formError" class="alert alert-error hidden" role="alert" aria-live="assertive"></div>
+
+        <!-- Submit -->
+        <button type="submit" class="btn btn-primary" id="analyzeBtn">
+          <i class="fa-solid fa-wand-magic-sparkles"></i> Analyze My Resume
+        </button>
+
+      </form>
+    </section>
+
+    <!-- ---- LOADING SPINNER ---- -->
+    <section id="loadingSection" class="card loading-card hidden" aria-live="polite" aria-busy="true">
+      <div class="spinner" aria-hidden="true"></div>
+      <p class="loading-text">Analyzing with local AI model… this usually takes 15–30 seconds.</p>
+      <p class="loading-subtext">Running on your machine via Ollama — no data leaves your PC.</p>
+    </section>
+
+    <!-- ---- RESULTS DASHBOARD ---- -->
+    <section id="resultsSection" class="hidden" aria-label="Skill gap analysis results">
+
+      <!-- Match Score -->
+      <div class="card score-card">
+        <h2 class="section-title">
+          <span class="step-badge">2</span> Your Skill Match Score
+        </h2>
+        <div class="score-wrap">
+          <div class="score-ring" role="img" aria-label="Match percentage">
+            <svg viewBox="0 0 120 120" class="ring-svg" aria-hidden="true">
+              <circle class="ring-bg" cx="60" cy="60" r="52"/>
+              <circle class="ring-fill" id="ringFill" cx="60" cy="60" r="52"
+                      stroke-dasharray="326.7" stroke-dashoffset="326.7"/>
+            </svg>
+            <span class="score-number" id="scoreNumber">0%</span>
+          </div>
+          <div class="score-meta">
+            <p id="scoreSummary" class="score-summary"></p>
+            <p id="scoreLabel" class="score-label"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Skills Side-by-Side -->
+      <div class="skills-grid">
+
+        <!-- Matching Skills -->
+        <div class="card skills-card matching">
+          <h3 class="card-title">
+            <i class="fa-solid fa-circle-check icon-green"></i> Matching Skills
+            <span class="badge" id="matchCount">0</span>
+          </h3>
+          <ul class="skill-list" id="matchingSkills" aria-label="Skills you already have"></ul>
+        </div>
+
+        <!-- Missing Skills -->
+        <div class="card skills-card missing">
+          <h3 class="card-title">
+            <i class="fa-solid fa-circle-xmark icon-red"></i> Missing Skills
+            <span class="badge badge-red" id="missingCount">0</span>
+          </h3>
+          <ul class="skill-list" id="missingSkills" aria-label="Skills you need to develop"></ul>
+        </div>
+
+      </div>
+
+      <!-- Recommendations -->
+      <div class="card reco-card">
+        <h2 class="section-title">
+          <span class="step-badge">3</span> Top Skills to Learn Next
+        </h2>
+        <div id="recommendations" class="reco-grid"></div>
+      </div>
+
+      <!-- Analyze Again -->
+      <div class="reset-wrap">
+        <button class="btn btn-secondary" id="resetBtn">
+          <i class="fa-solid fa-rotate-left"></i> Analyze Another Resume
+        </button>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ========== FOOTER ========== -->
+  <footer class="site-footer">
+    <div class="container">
+      <p>Built with ❤️ using Node.js &amp; Ollama (local AI) · Resume text never leaves your PC.</p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+ALEX MORGAN
+alex.morgan@email.com | github.com/alexmorgan | linkedin.com/in/alexmorgan
+Portfolio: alexmorgan.dev | (555) 123-4567
+
+SUMMARY
+-------
+Front-end focused software developer with 2 years of experience building web applications.
+Passionate about creating clean, user-friendly interfaces using modern JavaScript frameworks.
+Comfortable working in fast-paced startup environments and collaborating in cross-functional teams.
+
+SKILLS
+------
+Programming Languages : JavaScript (ES6+), HTML5, CSS3, Python (basic)
+Frameworks & Libraries : React, Vue.js, Tailwind CSS, Bootstrap
+Tools & Platforms     : Git, GitHub, VS Code, Figma, npm
+Back-end (basic)      : Node.js, REST APIs (consumption)
+Databases             : MySQL (basic CRUD queries)
+Other                 : Responsive design, browser DevTools, Agile/Scrum
+
+WORK EXPERIENCE
+---------------
+Front-End Developer — Pixelify Studio, Austin TX   (Jan 2023 – Present)
+- Built and maintained React-based dashboard used by 5,000+ daily active users.
+- Collaborated with UX designers in Figma to implement pixel-perfect UI components.
+- Integrated third-party REST APIs (Stripe, Twilio) into existing React applications.
+- Improved page load time by 30% through code splitting and lazy loading.
+- Participated in bi-weekly sprint planning and daily standups.
+
+Junior Web Developer — FreelancePath (contract)   (Jun 2022 – Dec 2022)
+- Developed landing pages and small web apps for 8 clients using HTML, CSS, and JavaScript.
+- Used Vue.js for one e-commerce client project.
+- Managed version control with Git and delivered projects on schedule.
+
+PROJECTS
+--------
+TaskFlow — Personal Project (github.com/alexmorgan/taskflow)
+- A full-stack task management app built with React (front-end) and Node.js/Express (back-end).
+- Stores data in a JSON file (no database used) and exposes a simple REST API.
+- Deployed on Vercel (front-end) and Render (back-end).
+
+WeatherNow — Personal Project
+- A weather dashboard consuming the OpenWeatherMap API, built with vanilla JavaScript.
+- Responsive design supporting mobile and desktop viewports.
+
+EDUCATION
+---------
+B.S. Computer Science — University of Texas at Austin   (Graduated May 2022)
+Relevant coursework: Data Structures, Algorithms, Web Development, Database Systems
+
+CERTIFICATIONS
+--------------
+- Meta Front-End Developer Certificate (Coursera, 2023)
+- JavaScript Algorithms and Data Structures — freeCodeCamp (2022)

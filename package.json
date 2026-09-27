@@ -1,0 +1,25 @@
+{
+  "name": "resume-skill-analyzer",
+  "version": "1.0.0",
+  "description": "A beginner-friendly Resume Skill Gap Analyzer — uses a local Ollama LLM for free, private AI analysis. No API key required.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "nodemon server/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "multer": "^2.4.0",
+    "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "4.4.168"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4",
+    "pdfkit": "0.20.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,54 @@
+Full-Stack Software Engineer – Product Team
+==========================================
+
+Company: TechNova Inc.
+Location: Remote (US-based)
+Type: Full-time
+
+About the Role
+--------------
+We are looking for a passionate Full-Stack Software Engineer to join our growing product team.
+You will design, build, and maintain features across the entire web stack — from REST APIs to
+responsive user interfaces. You'll work closely with designers, product managers, and fellow
+engineers in an agile environment.
+
+Responsibilities
+----------------
+- Design and implement RESTful APIs using Node.js and Express.
+- Build responsive, accessible front-end interfaces with React and TypeScript.
+- Write and maintain unit and integration tests (Jest, React Testing Library).
+- Collaborate with the DevOps team to manage CI/CD pipelines (GitHub Actions, Docker).
+- Optimize application performance and database queries (PostgreSQL, Redis).
+- Participate in code reviews and contribute to engineering best practices.
+- Write clear technical documentation for internal and external audiences.
+
+Required Skills & Qualifications
+---------------------------------
+- 2+ years of professional software development experience.
+- Proficiency in JavaScript (ES6+) and TypeScript.
+- Strong experience with React and state management (Redux or React Query).
+- Back-end experience with Node.js and Express.
+- Familiarity with relational databases (PostgreSQL) and basic SQL.
+- Understanding of RESTful API design principles.
+- Experience with Git version control and pull-request workflows.
+- Basic knowledge of Docker for containerized development.
+- Comfort working in an Agile/Scrum team.
+
+Nice-to-Have Skills
+-------------------
+- Experience with cloud platforms (AWS, GCP, or Azure).
+- Knowledge of GraphQL.
+- Familiarity with Redis caching.
+- Exposure to Kubernetes or container orchestration.
+- Understanding of web accessibility standards (WCAG).
+
+What We Offer
+-------------
+- Competitive salary and equity
+- Flexible remote-first culture
+- $2,000 annual learning & development budget
+- Health, dental, and vision insurance
+
+How to Apply
+------------
+Submit your resume and a brief note about a project you are proud of.

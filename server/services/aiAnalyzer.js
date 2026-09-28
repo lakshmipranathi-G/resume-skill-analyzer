@@ -1,452 +1,714 @@
-/**
- * server/services/aiAnalyzer.js
- * ──────────────────────────────
- * Analyses a resume against a job description and returns a structured
- * skill-gap report.
- *
- * Strategy (in priority order):
- *   1. Call local Ollama via http.request (no AbortSignal — Node 24 bug workaround).
- *      Uses /api/generate with format:"json" and temperature:0 for deterministic output.
- *   2. If Ollama fails OR returns unparseable JSON → run the deterministic fallback.
- *      The fallback matches skills from a comprehensive built-in skill list and always
- *      returns a valid report — the dashboard ALWAYS gets a result.
- *
- * NO API KEY REQUIRED.  No external services.  No OpenAI.
- *
- * Exported:
- *   analyzeSkillGap(resumeText, jobDescription) → Promise<SkillGapReport>
- *
- * SkillGapReport:
- *   match_percentage  : number  0-100
- *   matched_skills    : string[]
- *   missing_skills    : string[]
- *   recommendations   : { skill, reason, resource }[]
- *   summary           : string
- */
-
 "use strict";
 
-const http = require("http");
+const https = require("https");
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Config — safe defaults, .env is optional
-// ─────────────────────────────────────────────────────────────────────────────
-const OLLAMA_HOST = "localhost";
-const OLLAMA_PORT = 11434;
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.2:3b";
-const OLLAMA_TIMEOUT_MS = 90_000; // 90 s — generous for cold model load
+// ======================================================
+// GEMINI CONFIGURATION
+// ======================================================
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Deterministic skill list
-// Used by the fallback analyser to identify skills by keyword matching.
-// ─────────────────────────────────────────────────────────────────────────────
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_MODEL =
+  process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
+
+const GEMINI_HOST = "generativelanguage.googleapis.com";
+const GEMINI_TIMEOUT_MS = 90000;
+
+// ======================================================
+// SKILL LIST
+// ======================================================
+
 const SKILL_LIST = [
-  // Languages
-  "JavaScript","TypeScript","Python","Java","C#","C++","C","Go","Rust","Ruby",
-  "PHP","Swift","Kotlin","Scala","R","MATLAB","Bash","PowerShell","Perl","Lua",
-  // Frontend
-  "React","Vue","Angular","Svelte","Next.js","Nuxt","HTML","CSS","Sass","SCSS",
-  "Tailwind","Bootstrap","jQuery","Redux","Zustand","GraphQL","REST","REST APIs",
-  "Webpack","Vite","Babel","Storybook","Figma","Accessibility","WCAG",
-  // Backend
-  "Node.js","Express","Django","Flask","FastAPI","Spring","Laravel","Rails",
-  "ASP.NET","Gin","Fiber","NestJS","Hapi","Fastify","tRPC","gRPC","WebSockets",
-  // Databases
-  "PostgreSQL","MySQL","SQLite","MongoDB","Redis","Elasticsearch","Cassandra",
-  "DynamoDB","Firebase","Supabase","Prisma","Sequelize","TypeORM","SQL","NoSQL",
-  // DevOps / Cloud
-  "Docker","Kubernetes","Terraform","Ansible","Jenkins","GitHub Actions","GitLab CI",
-  "CircleCI","AWS","GCP","Azure","Vercel","Netlify","Heroku","CI/CD","Linux",
-  "Nginx","Apache","Prometheus","Grafana","DataDog","Helm",
-  // Tools & practices
-  "Git","GitHub","GitLab","Jira","Confluence","Agile","Scrum","Kanban",
-  "TDD","BDD","Jest","Mocha","Cypress","Playwright","Vitest","Pytest",
-  "Postman","Swagger","OpenAPI","Microservices","Serverless","Event-Driven",
-  // Data / AI
-  "Machine Learning","Deep Learning","TensorFlow","PyTorch","Keras","scikit-learn",
-  "Pandas","NumPy","Jupyter","Spark","Hadoop","Airflow","dbt","Power BI","Tableau",
-  // Soft / professional
-  "Communication","Leadership","Teamwork","Problem Solving","Agile","Project Management",
-  "Code Review","Mentoring","Documentation","Technical Writing",
+  "Python",
+  "Java",
+  "JavaScript",
+  "TypeScript",
+  "C",
+  "C++",
+  "C#",
+  "HTML",
+  "CSS",
+  "React",
+  "Angular",
+  "Vue",
+  "Node.js",
+  "Express",
+  "SQL",
+  "MySQL",
+  "PostgreSQL",
+  "MongoDB",
+  "Oracle",
+  "Artificial Intelligence",
+  "Machine Learning",
+  "Deep Learning",
+  "Natural Language Processing",
+  "Computer Vision",
+  "TensorFlow",
+  "PyTorch",
+  "Scikit-learn",
+  "Keras",
+  "Data Analysis",
+  "Data Science",
+  "Pandas",
+  "NumPy",
+  "Matplotlib",
+  "Power BI",
+  "Tableau",
+  "Excel",
+  "AWS",
+  "Azure",
+  "Google Cloud",
+  "Docker",
+  "Kubernetes",
+  "Git",
+  "GitHub",
+  "REST API",
+  "API",
+  "Problem Solving",
+  "Communication",
+  "Leadership",
+  "Teamwork",
+  "Agile",
+  "Scrum"
 ];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Prompt
-// ─────────────────────────────────────────────────────────────────────────────
+// ======================================================
+// TEXT HELPER
+// ======================================================
 
-/**
- * Condenses a block of text down to its most skill-dense lines.
- * Keeps lines that contain skill-keyword signals, plus the first few lines
- * for context. This keeps the prompt short enough for llama3.2:3b to answer
- * in well under 90 seconds on a CPU-only machine.
- */
 function condense(text, maxChars) {
-  const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
-  // Prefer lines that look skill-related
-  const skillSignals = /skill|experience|proficien|familiar|knowledge|develop|engineer|tool|technolog|language|framework|library|platform|cloud|database|certif|project/i;
-  const ranked = lines
-    .map(l => ({ l, score: skillSignals.test(l) ? 1 : 0 }))
-    .sort((a, b) => b.score - a.score);
-  let out = "";
-  for (const { l } of ranked) {
-    if ((out + l).length > maxChars) break;
-    out += l + "\n";
+  const cleaned = String(text || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (cleaned.length <= maxChars) {
+    return cleaned;
   }
-  return out.trim();
+
+  return cleaned.slice(0, maxChars) + "...";
 }
+
+// ======================================================
+// GEMINI PROMPT
+// ======================================================
 
 function buildPrompt(resumeText, jobDescription) {
-  // Keep each section tight — llama3.2:3b on CPU needs a short prompt
-  const resume = condense(resumeText, 800);
-  const job    = condense(jobDescription, 600);
+  return `
+You are a professional resume and job matching assistant.
 
-  return (
-    `You are a recruiter. Compare the RESUME and JOB below.\n` +
-    `Return ONLY a JSON object with EXACTLY these 5 keys (no other text, no markdown):\n` +
-    `{"match_percentage":<int 0-100>,"matched_skills":[<strings>],"missing_skills":[<strings>],"recommendations":[{"skill":<str>,"reason":<str>,"resource":<str>}],"summary":<str>}\n` +
-    `IMPORTANT: recommendations MUST contain 3 to 5 objects picked from missing_skills. Each object needs skill, reason, and resource fields.\n` +
-    `matched_skills=skills in both; missing_skills=job skills absent from resume; summary=2 sentences.\n\n` +
-    `RESUME:\n${resume}\n\nJOB:\n${job}`
-  );
+Compare the RESUME with the JOB DESCRIPTION.
+
+Rules:
+1. matched_skills must contain skills clearly present in both.
+2. missing_skills must contain job-required skills not clearly present in the resume.
+3. Do not invent skills.
+4. match_percentage must be an integer from 0 to 100.
+5. recommendations must contain 3 to 5 useful recommendations.
+6. Each recommendation must contain skill, reason, and resource.
+7. summary must contain exactly 2 sentences.
+8. Return ONLY valid JSON.
+9. Do not use markdown.
+10. Do not add any text outside the JSON.
+
+Return this structure:
+
+{
+  "match_percentage": 75,
+  "matched_skills": ["Python", "SQL"],
+  "missing_skills": ["Deep Learning"],
+  "recommendations": [
+    {
+      "skill": "Deep Learning",
+      "reason": "This skill is required by the job but is not clearly shown in the resume.",
+      "resource": "Learn neural networks and deep learning fundamentals."
+    }
+  ],
+  "summary": "The candidate has relevant skills for this role. Developing the missing skills can improve alignment with the job."
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// HTTP helper — uses Node's http.request (no fetch, no AbortSignal)
-// Avoids the Node 24 AbortSignal.timeout() premature-abort bug on Windows.
-// ─────────────────────────────────────────────────────────────────────────────
-function httpPost(path, payload) {
-  return new Promise((resolve, reject) => {
-    const bodyStr = JSON.stringify(payload);
+RESUME:
+${condense(resumeText, 1500)}
 
-    const req = http.request(
+JOB DESCRIPTION:
+${condense(jobDescription, 1500)}
+`;
+}
+
+// ======================================================
+// HTTPS REQUEST
+// ======================================================
+
+function httpsPost(path, payload) {
+  return new Promise((resolve, reject) => {
+    if (!GEMINI_API_KEY) {
+      reject(new Error("GEMINI_API_KEY is not configured"));
+      return;
+    }
+
+    const body = JSON.stringify(payload);
+
+    const request = https.request(
       {
-        hostname: OLLAMA_HOST,
-        port:     OLLAMA_PORT,
-        path,
-        method:   "POST",
-        headers:  {
-          "Content-Type":   "application/json",
-          "Content-Length": Buffer.byteLength(bodyStr),
-        },
+        hostname: GEMINI_HOST,
+        path: path,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body),
+          "x-goog-api-key": GEMINI_API_KEY
+        }
       },
-      (res) => {
-        let raw = "";
-        res.on("data", (chunk) => (raw += chunk));
-        res.on("end", () => {
-          if (res.statusCode < 200 || res.statusCode >= 300) {
-            return reject(new Error(`Ollama HTTP ${res.statusCode}: ${raw.slice(0, 200)}`));
+      (response) => {
+        let data = "";
+
+        response.on("data", (chunk) => {
+          data += chunk;
+        });
+
+        response.on("end", () => {
+          if (
+            response.statusCode < 200 ||
+            response.statusCode >= 300
+          ) {
+            reject(
+              new Error(
+                `Gemini HTTP ${response.statusCode}: ${data.slice(0, 500)}`
+              )
+            );
+            return;
           }
-          resolve(raw);
+
+          resolve(data);
         });
       }
     );
 
-    // Manual timeout via setTimeout — avoids AbortSignal bug
     const timer = setTimeout(() => {
-      req.destroy(new Error(`Ollama request timed out after ${OLLAMA_TIMEOUT_MS / 1000}s`));
-    }, OLLAMA_TIMEOUT_MS);
+      request.destroy(
+        new Error(
+          "Gemini request timed out after 90 seconds"
+        )
+      );
+    }, GEMINI_TIMEOUT_MS);
 
-    req.on("response", () => clearTimeout(timer));
-    req.on("error",    (e) => { clearTimeout(timer); reject(e); });
-    req.on("close",    ()  => clearTimeout(timer));
+    request.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
 
-    req.write(bodyStr);
-    req.end();
+    request.on("close", () => {
+      clearTimeout(timer);
+    });
+
+    request.write(body);
+    request.end();
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Call Ollama  /api/generate  with  format:"json"
-// ─────────────────────────────────────────────────────────────────────────────
-async function callOllama(resumeText, jobDescription) {
-  const rawStr = await httpPost("/api/generate", {
-    model:   OLLAMA_MODEL,
-    prompt:  buildPrompt(resumeText, jobDescription),
-    format:  "json",   // forces Ollama to emit valid JSON tokens
-    stream:  false,
-    options: { temperature: 0, num_predict: 700 },
-  });
+// ======================================================
+// CALL GEMINI
+// ======================================================
 
-  const envelope = JSON.parse(rawStr);          // outer Ollama envelope
-  const content  = envelope?.response?.trim();  // the model's actual output
-
-  if (!content) throw new Error("Ollama returned empty response field");
-  return content;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// JSON extraction — handles clean JSON, markdown fences, preamble text
-// ─────────────────────────────────────────────────────────────────────────────
-function extractJSON(raw) {
-  if (!raw) return null;
-
-  // 1. Direct parse (ideal — what format:json produces)
-  try { return JSON.parse(raw); } catch { /* fall through */ }
-
-  // 2. Strip ```json … ``` fences
-  const stripped = raw
-    .replace(/^```(?:json)?\s*/im, "")
-    .replace(/\s*```\s*$/m,        "")
-    .trim();
-  try { return JSON.parse(stripped); } catch { /* fall through */ }
-
-  // 3. Find the first { … last } and parse that slice
-  const s = raw.indexOf("{");
-  const e = raw.lastIndexOf("}");
-  if (s !== -1 && e > s) {
-    try { return JSON.parse(raw.slice(s, e + 1)); } catch { /* fall through */ }
+async function callGemini(resumeText, jobDescription) {
+  if (!GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is not configured");
   }
 
-  return null;
-}
+  const responseSchema = {
+    type: "OBJECT",
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Normalise — accepts both snake_case and camelCase keys from the model,
-// maps to the canonical shape the frontend reads.
-// ─────────────────────────────────────────────────────────────────────────────
-function normalise(obj) {
-  const pct      = obj.match_percentage  ?? obj.matchPercentage  ?? 0;
-  const matched  = obj.matched_skills    ?? obj.matchingSkills   ?? [];
-  const missing  = obj.missing_skills    ?? obj.missingSkills    ?? [];
-  const recos    = obj.recommendations   ?? [];
-  const summary  = obj.summary ?? "";
+    properties: {
+      match_percentage: {
+        type: "INTEGER"
+      },
 
-  let safeRecos = (Array.isArray(recos) ? recos : [])
-    .filter(r => r && typeof r === "object" && r.skill)
-    .map(r => ({
-      skill:    String(r.skill    || r.name   || ""),
-      reason:   String(r.reason   || r.why    || ""),
-      resource: String(r.resource || r.link   || ""),
-    }));
+      matched_skills: {
+        type: "ARRAY",
+        items: {
+          type: "STRING"
+        }
+      },
 
-  // If model returned no recommendations, generate them from missing_skills.
-  // This makes the report useful even when the model skips that field.
-  if (safeRecos.length === 0 && Array.isArray(missing) && missing.length > 0) {
-    safeRecos = missing.slice(0, 5).map(skill => ({
-      skill:    String(skill),
-      reason:   `"${skill}" is required by the job description but not present in your resume.`,
-      resource: getResource(String(skill)),
-    }));
-  }
+      missing_skills: {
+        type: "ARRAY",
+        items: {
+          type: "STRING"
+        }
+      },
 
-  // Guarantee at least 3 recommendations — pad with popular skills if still short
-  if (safeRecos.length < 3) {
-    const popular = ["TypeScript","Docker","PostgreSQL","AWS","Kubernetes","GraphQL","Redis","Jest"];
-    const existing = new Set(safeRecos.map(r => r.skill.toLowerCase()));
-    const matchedSet = new Set((Array.isArray(matched) ? matched : []).map(s => String(s).toLowerCase()));
-    for (const skill of popular) {
-      if (safeRecos.length >= 3) break;
-      if (!existing.has(skill.toLowerCase()) && !matchedSet.has(skill.toLowerCase())) {
-        safeRecos.push({
-          skill,
-          reason:   `"${skill}" is widely required for this type of role.`,
-          resource: getResource(skill),
-        });
-        existing.add(skill.toLowerCase());
+      recommendations: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+
+          properties: {
+            skill: {
+              type: "STRING"
+            },
+
+            reason: {
+              type: "STRING"
+            },
+
+            resource: {
+              type: "STRING"
+            }
+          },
+
+          required: [
+            "skill",
+            "reason",
+            "resource"
+          ]
+        }
+      },
+
+      summary: {
+        type: "STRING"
       }
+    },
+
+    required: [
+      "match_percentage",
+      "matched_skills",
+      "missing_skills",
+      "recommendations",
+      "summary"
+    ]
+  };
+
+  const payload = {
+    contents: [
+      {
+        parts: [
+          {
+            text: buildPrompt(
+              resumeText,
+              jobDescription
+            )
+          }
+        ]
+      }
+    ],
+
+    generationConfig: {
+      temperature: 0,
+      responseMimeType: "application/json",
+      responseSchema: responseSchema
     }
+  };
+
+  const path =
+    `/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
+  const rawResponse = await httpsPost(
+    path,
+    payload
+  );
+
+  const responseData = JSON.parse(rawResponse);
+
+  const result =
+    responseData
+      ?.candidates?.[0]
+      ?.content?.parts?.[0]
+      ?.text
+      ?.trim();
+
+  if (!result) {
+    throw new Error(
+      "Gemini returned an empty response"
+    );
   }
+
+  return result;
+}
+
+// ======================================================
+// EXTRACT JSON
+// ======================================================
+
+function extractJSON(text) {
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    // Try extracting JSON from surrounding text
+  }
+
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+
+  if (start === -1 || end === -1) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(
+      text.slice(start, end + 1)
+    );
+  } catch (error) {
+    return null;
+  }
+}
+
+// ======================================================
+// NORMALISE RESULT
+// ======================================================
+
+function normalise(report) {
+  const percentage =
+    Number(report?.match_percentage);
 
   return {
-    match_percentage: Math.max(0, Math.min(100, Math.round(Number(pct) || 0))),
-    matched_skills:   Array.isArray(matched) ? matched.map(String) : [],
-    missing_skills:   Array.isArray(missing) ? missing.map(String) : [],
-    recommendations:  safeRecos,
-    summary:          String(summary),
+    match_percentage:
+      Number.isFinite(percentage)
+        ? Math.max(
+            0,
+            Math.min(
+              100,
+              Math.round(percentage)
+            )
+          )
+        : 0,
+
+    matched_skills:
+      Array.isArray(report?.matched_skills)
+        ? report.matched_skills
+            .map(String)
+            .map((skill) => skill.trim())
+            .filter(Boolean)
+        : [],
+
+    missing_skills:
+      Array.isArray(report?.missing_skills)
+        ? report.missing_skills
+            .map(String)
+            .map((skill) => skill.trim())
+            .filter(Boolean)
+        : [],
+
+    recommendations:
+      Array.isArray(report?.recommendations)
+        ? report.recommendations
+            .map((item) => ({
+              skill: String(
+                item?.skill || ""
+              ).trim(),
+
+              reason: String(
+                item?.reason || ""
+              ).trim(),
+
+              resource: String(
+                item?.resource || ""
+              ).trim()
+            }))
+            .filter(
+              (item) =>
+                item.skill &&
+                item.reason &&
+                item.resource
+            )
+        : [],
+
+    summary: String(
+      report?.summary || ""
+    ).trim()
   };
 }
 
+// ======================================================
+// CHECK RESULT
+// ======================================================
+
 function isUsable(report) {
-  return (
-    typeof report.match_percentage === "number" &&
-    Array.isArray(report.matched_skills)         &&
-    Array.isArray(report.missing_skills)
+  return Boolean(
+    report &&
+    Number.isFinite(
+      report.match_percentage
+    ) &&
+    Array.isArray(
+      report.matched_skills
+    ) &&
+    Array.isArray(
+      report.missing_skills
+    ) &&
+    Array.isArray(
+      report.recommendations
+    ) &&
+    report.summary
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Deterministic fallback analyser
-// Runs entirely in-process — no network, no model, always succeeds.
-// ─────────────────────────────────────────────────────────────────────────────
+// ======================================================
+// FALLBACK RESOURCES
+// ======================================================
 
-/** Free learning resources keyed by skill name (lowercase). */
 const RESOURCES = {
-  typescript:       "TypeScript Handbook – typescriptlang.org/docs",
-  docker:           "Docker Getting Started – docs.docker.com/get-started",
-  kubernetes:       "Kubernetes Basics – kubernetes.io/docs/tutorials",
-  postgresql:       "PostgreSQL Tutorial – postgresqltutorial.com",
-  mysql:            "MySQL Tutorial – mysqltutorial.org",
-  mongodb:          "MongoDB University – learn.mongodb.com",
-  redis:            "Redis University – university.redis.io",
-  aws:              "AWS Skill Builder – skillbuilder.aws (free tier)",
-  gcp:              "Google Cloud Skills Boost – cloudskillsboost.google",
-  azure:            "Microsoft Learn – learn.microsoft.com/azure",
-  react:            "React Docs – react.dev/learn",
-  vue:              "Vue.js Guide – vuejs.org/guide",
-  angular:          "Angular Tutorial – angular.io/tutorial",
-  "next.js":        "Next.js Learn – nextjs.org/learn",
-  graphql:          "GraphQL Tutorial – graphql.org/learn",
-  "node.js":        "Node.js Docs – nodejs.org/en/learn",
-  python:           "Python Tutorial – docs.python.org/3/tutorial",
-  django:           "Django Tutorial – docs.djangoproject.com",
-  flask:            "Flask Quickstart – flask.palletsprojects.com",
-  git:              "Git Book – git-scm.com/book",
-  "github actions": "GitHub Actions Docs – docs.github.com/actions",
-  jest:             "Jest Docs – jestjs.io/docs/getting-started",
-  cypress:          "Cypress Docs – docs.cypress.io",
-  "machine learning":"ML Crash Course – developers.google.com/machine-learning",
-  terraform:        "Terraform Learn – developer.hashicorp.com/terraform/tutorials",
-  linux:            "Linux Journey – linuxjourney.com",
-  "ci/cd":          "CI/CD Guide – atlassian.com/continuous-delivery",
-  "rest apis":      "REST API Tutorial – restfulapi.net",
+  Python:
+    "Practice Python fundamentals, data structures, functions, and problem solving.",
+
+  Java:
+    "Learn Java syntax, OOP, collections, and exception handling.",
+
+  JavaScript:
+    "Practice modern JavaScript, DOM, and ES6+ features.",
+
+  SQL:
+    "Practice SELECT, JOIN, GROUP BY, subqueries, and aggregate functions.",
+
+  MySQL:
+    "Practice database design, SQL queries, joins, indexes, and transactions.",
+
+  "Machine Learning":
+    "Learn supervised learning, unsupervised learning, model evaluation, and feature engineering.",
+
+  "Deep Learning":
+    "Learn neural networks, backpropagation, CNNs, and deep learning workflows.",
+
+  "Data Analysis":
+    "Practice data cleaning, exploratory analysis, visualization, and interpretation.",
+
+  Pandas:
+    "Practice loading, cleaning, filtering, transforming, and analyzing datasets with Pandas.",
+
+  NumPy:
+    "Practice arrays, indexing, vectorized operations, and numerical computing with NumPy.",
+
+  Git:
+    "Practice commits, branches, merging, and GitHub workflows.",
+
+  React:
+    "Learn components, props, state, hooks, and React application development.",
+
+  "Problem Solving":
+    "Practice algorithms and data structures through coding problems.",
+
+  Communication:
+    "Improve technical communication through presentations, documentation, and discussions.",
+
+  "Artificial Intelligence":
+    "Learn AI fundamentals, machine learning, reasoning, and intelligent systems.",
+
+  "Computer Vision":
+    "Learn image processing, CNNs, and computer vision applications.",
+
+  "Natural Language Processing":
+    "Learn text preprocessing, embeddings, classification, and NLP."
 };
 
 function getResource(skill) {
-  return RESOURCES[skill.toLowerCase()] || `Search: "${skill} tutorial free" on freeCodeCamp or YouTube`;
-}
-
-/**
- * Extract skills from a block of text by matching against SKILL_LIST.
- * Returns a Set of matched skill names (preserving original casing from list).
- */
-function extractSkills(text) {
-  const lower = text.toLowerCase();
-  const found = new Set();
-  for (const skill of SKILL_LIST) {
-    // Word-boundary match: skill must not be part of a longer word
-    const escaped = skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`(?<![a-zA-Z0-9])${escaped}(?![a-zA-Z0-9])`, "i");
-    if (re.test(lower)) found.add(skill);
-  }
-  return found;
-}
-
-/**
- * The deterministic fallback. Always returns a valid report.
- */
-function deterministicAnalysis(resumeText, jobDescription) {
-  console.log("[analyzer] Running deterministic fallback...");
-
-  const resumeSkills = extractSkills(resumeText);
-  const jobSkills    = extractSkills(jobDescription);
-
-  const matched = [...jobSkills].filter(s => resumeSkills.has(s));
-  const missing = [...jobSkills].filter(s => !resumeSkills.has(s));
-
-  // Also capture skills in resume not mentioned in job (extra skills)
-  const bonus = [...resumeSkills].filter(s => !jobSkills.has(s));
-
-  // Percentage: matched job skills / total job skills
-  const pct = jobSkills.size === 0
-    ? 0
-    : Math.round((matched.length / jobSkills.size) * 100);
-
-  // Pick 3-5 recommendations from missing skills
-  const recoSkills = missing.slice(0, 5);
-  const recommendations = recoSkills.map(skill => ({
-    skill,
-    reason:   `"${skill}" is listed as a requirement in the job description and is not present in your resume.`,
-    resource: getResource(skill),
-  }));
-
-  // If fewer than 3 recos, pad with popular skills not already matched
-  if (recommendations.length < 3) {
-    const popular = ["TypeScript","Docker","PostgreSQL","AWS","Kubernetes","GraphQL","Redis"];
-    for (const skill of popular) {
-      if (recommendations.length >= 3) break;
-      if (!matched.includes(skill) && !recoSkills.includes(skill)) {
-        recommendations.push({
-          skill,
-          reason:   `"${skill}" is a widely requested skill for this type of role.`,
-          resource: getResource(skill),
-        });
-      }
-    }
-  }
-
-  const summaryParts = [];
-  if (matched.length > 0) {
-    summaryParts.push(`Your resume matches ${matched.length} of the ${jobSkills.size} skills identified in the job description (${pct}% match).`);
-  } else {
-    summaryParts.push(`No direct skill overlap was detected between your resume and the job description.`);
-  }
-  if (missing.length > 0) {
-    summaryParts.push(`Focus on building: ${missing.slice(0, 4).join(", ")}${missing.length > 4 ? ", and more" : ""}.`);
-  } else {
-    summaryParts.push("You appear to have all the listed skills — tailor your resume language to the job posting.");
-  }
-
-  const report = {
-    match_percentage: pct,
-    matched_skills:   matched,
-    missing_skills:   missing,
-    recommendations,
-    summary:          summaryParts.join(" "),
-    _source:          "fallback", // internal flag — not shown in UI
-  };
-
-  console.log(
-    `[analyzer] Fallback complete — ${pct}% match, ` +
-    `${matched.length} matched, ${missing.length} missing`
+  return (
+    RESOURCES[skill] ||
+    `Build practical projects and complete hands-on exercises to develop ${skill}.`
   );
-  return report;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Main exported function
-// ─────────────────────────────────────────────────────────────────────────────
+// ======================================================
+// EXTRACT SKILLS FOR FALLBACK
+// ======================================================
 
-/**
- * Analyzes the skill gap between a resume and a job description.
- *
- * Always returns a usable report — never throws a user-visible error.
- *
- * @param {string} resumeText
- * @param {string} jobDescription
- * @returns {Promise<object>} SkillGapReport
- */
-async function analyzeSkillGap(resumeText, jobDescription) {
-  // ── Attempt 1: Ollama ─────────────────────────────────────────────────────
-  let ollamaReport = null;
+function extractSkills(text) {
+  const lowerText =
+    String(text || "").toLowerCase();
 
-  try {
-    console.log(`[analyzer] Calling Ollama (${OLLAMA_MODEL})...`);
-    const rawContent = await callOllama(resumeText, jobDescription);
-    console.log("[analyzer] Ollama raw (first 150):", rawContent.slice(0, 150));
+  return SKILL_LIST.filter(
+    (skill) =>
+      lowerText.includes(
+        skill.toLowerCase()
+      )
+  );
+}
 
-    const parsed = extractJSON(rawContent);
-    if (parsed) {
-      const report = normalise(parsed);
-      if (isUsable(report)) {
-        ollamaReport = report;
-        console.log(
-          `[analyzer] Ollama OK — ${report.match_percentage}% match, ` +
-          `${report.matched_skills.length} matched, ${report.missing_skills.length} missing`
-        );
-      } else {
-        console.warn("[analyzer] Ollama JSON missing required fields — using fallback");
-      }
-    } else {
-      console.warn("[analyzer] Could not parse Ollama response — using fallback");
-    }
-  } catch (err) {
-    // Give a clear console message but do NOT throw — fallback handles it
-    if (
-      err.message?.includes("ECONNREFUSED") ||
-      err.code === "ECONNREFUSED"
-    ) {
-      console.warn(
-        `[analyzer] Ollama not reachable at ${OLLAMA_HOST}:${OLLAMA_PORT}. ` +
-        "Running deterministic fallback."
+// ======================================================
+// FALLBACK ANALYSIS
+// ======================================================
+
+function deterministicAnalysis(
+  resumeText,
+  jobDescription
+) {
+  const resumeSkills =
+    extractSkills(resumeText);
+
+  const jobSkills =
+    extractSkills(jobDescription);
+
+  const resumeSkillSet =
+    new Set(
+      resumeSkills.map(
+        (skill) =>
+          skill.toLowerCase()
+      )
+    );
+
+  const matchedSkills =
+    jobSkills.filter(
+      (skill) =>
+        resumeSkillSet.has(
+          skill.toLowerCase()
+        )
+    );
+
+  const missingSkills =
+    jobSkills.filter(
+      (skill) =>
+        !resumeSkillSet.has(
+          skill.toLowerCase()
+        )
+    );
+
+  let matchPercentage = 0;
+
+  if (jobSkills.length > 0) {
+    matchPercentage =
+      Math.round(
+        (matchedSkills.length /
+          jobSkills.length) *
+          100
       );
-    } else {
-      console.warn("[analyzer] Ollama error:", err.message, "— using fallback");
+  }
+
+  const recommendations =
+    missingSkills
+      .slice(0, 5)
+      .map((skill) => ({
+        skill: skill,
+
+        reason:
+          `The job description mentions ${skill}, but it is not clearly shown in the resume.`,
+
+        resource:
+          getResource(skill)
+      }));
+
+  const extraSkills = [
+    "Machine Learning",
+    "SQL",
+    "Python",
+    "Git",
+    "Problem Solving"
+  ];
+
+  for (const skill of extraSkills) {
+    if (
+      recommendations.length >= 3
+    ) {
+      break;
+    }
+
+    const alreadyExists =
+      recommendations.some(
+        (item) =>
+          item.skill.toLowerCase() ===
+          skill.toLowerCase()
+      );
+
+    if (!alreadyExists) {
+      recommendations.push({
+        skill: skill,
+
+        reason:
+          `Developing ${skill} can strengthen the candidate's technical profile.`,
+
+        resource:
+          getResource(skill)
+      });
     }
   }
 
-  // ── Fallback (always available) ───────────────────────────────────────────
-  if (ollamaReport) return ollamaReport;
-  return deterministicAnalysis(resumeText, jobDescription);
+  const summary =
+    matchedSkills.length > 0
+      ? `The resume demonstrates ${matchedSkills.length} skill(s) that match the job requirements. Developing the missing skills can improve alignment with the role.`
+      : `The resume does not clearly show many of the skills required by the job. Developing the required skills can improve alignment with the role.`;
+
+  return {
+    match_percentage:
+      matchPercentage,
+
+    matched_skills:
+      matchedSkills,
+
+    missing_skills:
+      missingSkills,
+
+    recommendations:
+      recommendations,
+
+    summary:
+      summary,
+
+    _source:
+      "fallback"
+  };
 }
 
-module.exports = { analyzeSkillGap };
+// ======================================================
+// MAIN ANALYZER
+// ======================================================
+
+async function analyzeSkillGap(
+  resumeText,
+  jobDescription
+) {
+  try {
+    console.log(
+      `[analyzer] Calling Gemini (${GEMINI_MODEL})...`
+    );
+
+    const rawContent =
+      await callGemini(
+        resumeText,
+        jobDescription
+      );
+
+    console.log(
+      "[analyzer] Gemini raw response:",
+      rawContent.slice(0, 200)
+    );
+
+    const parsed =
+      extractJSON(rawContent);
+
+    if (parsed) {
+      const report =
+        normalise(parsed);
+
+      if (isUsable(report)) {
+        console.log(
+          `[analyzer] Gemini OK — ${report.match_percentage}% match, ` +
+          `${report.matched_skills.length} matched, ` +
+          `${report.missing_skills.length} missing`
+        );
+
+        return report;
+      }
+    }
+
+    console.warn(
+      "[analyzer] Gemini response was not usable — using fallback"
+    );
+  } catch (error) {
+    console.warn(
+      "[analyzer] Gemini error:",
+      error.message,
+      "— using fallback"
+    );
+  }
+
+  return deterministicAnalysis(
+    resumeText,
+    jobDescription
+  );
+}
+
+// ======================================================
+// EXPORT
+// ======================================================
+
+module.exports = {
+  analyzeSkillGap
+};
